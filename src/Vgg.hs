@@ -82,3 +82,41 @@ instance Randomizable VggSpec Vgg where
     linearLayers <- sequenceA $ sample <$> linearLayersSpec
     pure $ Vgg convLayers linearLayers
   
+vgg11 :: Vgg -> Tensor -> Tensor 
+vgg11 weights = vggForward weights [1,3,5,7]
+
+vgg13 :: Vgg -> Tensor -> Tensor 
+vgg13 weights = vggForward weights [2,5,8,11]
+
+vgg16 :: Vgg -> Tensor -> Tensor 
+vgg16 weights = vggForward weights [2,5,9,13]
+
+vgg19 :: Vgg -> Tensor -> Tensor 
+vgg19 weights = vggForward weights [2,5,10,15]
+
+  -- not a safe function with how it is implemented but it should be an internal function
+  -- so we can guarantee our head and tail calls won't error at runtime
+vggForward :: Vgg -> [Int] -> Tensor -> Tensor
+vggForward Vgg{..} poolingLayerIx  input =
+  linear (head linearLayers) $ foldl (\inp l -> relu $ linear l inp)  flattenedConv (tail linearLayers) 
+  where
+    flattenedConv = flatten (Dim 1) (Dim (-1))
+      $ adaptiveAvgPool2d (7,7)
+      $ maxPool2d poolKernel poolStride noPad (1,1) False
+      $ foldConv input
+
+    foldConv tensor = foldl
+      (\input (ix, layer)  -> if ix `elem` poolingLayerIx
+                      then maxPool2d poolKernel poolStride noPad (1,1) False $ conv2dRelu layer input
+                      else conv2dRelu layer input)
+      tensor (zip [0..] convLayers)
+
+    conv2dRelu layer = relu . conv2dForward layer noStride pad 
+    poolStride = (2,2)
+    noStride = (1,1)
+    noPad = (0,0)
+    pad = (1,1)
+    poolKernel = (2,2)
+    
+
+  
