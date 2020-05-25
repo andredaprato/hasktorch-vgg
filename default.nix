@@ -7,9 +7,9 @@ let
       owner = "hasktorch";
       repo = "hasktorch";
       rev =
-        "d9be93a10562460ece503495c40b409a040cadb1"; # use whatever revision you'd like
+        "5f905f7ac62913a09cbb214d17c94dbc64fc8c7b"; # use whatever revision you'd like
       sha256 =
-        "19nfyd8g2j4797x2sifklp8rggcd5w2x6c8z1494x8a54gabd9sn" ; # update the sha256 value to something arbitrary when you bump the revision; nix will complain with the correct value.
+        "1y7v3aagd6ki536x56r4pqmvshn4skmlmmlxn2imbrxcazfsh3av" ; # update the sha256 value to something arbitrary when you bump the revision; nix will complain with the correct value.
     };
 
     # all-hies = import (builtins.fetchTarball
