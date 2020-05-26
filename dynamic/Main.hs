@@ -15,12 +15,6 @@ import Vgg
 randomIndexes :: Int -> [Int]
 randomIndexes size = (`mod` size) <$> randoms seed where seed = mkStdGen 123
 
-  
-normalize :: Int -> Tensor -> Tensor
-normalize batchSize img = (img / asTensor (255 :: Float) - mean) / std 
-  where
-    mean = cat (Dim 1) $  (\x -> full [batchSize,1,224,224] x withCuda)  <$> [0.485 :: Float, 0.456, 0.406]
-    std = cat (Dim 1) $  (\x -> full [batchSize,1,224,224] x withCuda ) <$> [0.229 :: Float, 0.224, 0.225]
 
 resizeImage batchSize img = expand upsampled  True [batchSize, 3,224,224] 
   where upsampled = upsampleBilinear2d (224,224) False  $ reshape [batchSize,1,28,28] img
@@ -43,14 +37,13 @@ train vggParams trainData = do
     newParams <- sequenceA $ fmap makeIndependent toCuda
     let optimizer = mkAdam 0 0.9 0.99 newParams
     let init =  replaceParameters spec newParams
-    -- init <- sample spec
     let nImages = V.length trainData
         idxList = randomIndexes nImages
     trained <- foldLoop init numIters $
         \state iter -> do
             let idx = take batchSize (drop (iter * batchSize) idxList)
-            input <-  toDevice gpu <$> V.getImages' batchSize dataDim trainData idx
-            let rszd = normalize batchSize $ resizeImage batchSize input 
+            input <- V.getImages' batchSize dataDim trainData idx
+            let rszd = toDevice gpu $ normalize batchSize $ resizeImage batchSize input 
                 label = toDevice gpu $ V.getLabels' batchSize trainData idx
                 loss = nllLoss' label $  forward vggParams state rszd
             when (iter `mod` 50 == 0) $ do

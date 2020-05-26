@@ -1,23 +1,21 @@
 {-# LANGUAGE NoStarIsType #-}
 module Typed.Vgg where
 
-import Torch.Typed
-import Torch.Typed.NN (Dropout, Conv2d, Conv2dSpec(..), Linear, LinearSpec(..), linear, conv2d)
-import Torch.Typed.Functional (relu, maxPool2d, adaptiveAvgPool2d)
+import           GHC.Generics
+import           GHC.TypeLits
 import           GHC.TypeLits.Extra
-import Torch.NN (Randomizable)
 import qualified Torch as A
-import Torch.Typed.Tensor (KnownDevice, KnownDType, Tensor, reshape)
-import Torch.Typed.Factories (RandDTypeIsValid)
+import           Torch.DType as D
 import qualified Torch.Device as D
-import Torch.DType as D
-import GHC.Generics
-import GHC.TypeLits
+import           Torch.HList
+import           Torch.NN (Randomizable)
+import           Torch.Typed
+import           Torch.Typed.Factories (RandDTypeIsValid, full)
+import           Torch.Typed.Functional (relu, maxPool2d, adaptiveAvgPool2d, cat)
+import           Torch.Typed.NN (Dropout, Conv2d, Conv2dSpec(..), Linear, LinearSpec(..), linear, conv2d)
+import           Torch.Typed.Tensor (KnownDevice, KnownDType, Tensor, reshape)
 
 
--- type KernelSize = '(3,3)
--- type Stride = '(2,2)
--- type Padding = '(1,1)
 
 data VggSpec (dtype :: D.DType) (device :: (D.DeviceType, Nat))
   = VggSpec deriving (Show, Eq)
@@ -80,8 +78,6 @@ vgg16Forward v@Vgg16{..} = linear l3 . relu . vgg16ForwardNoFinal v
 
 vgg16ForwardNoFinal  :: forall batchSize dv dt . _ => Vgg16 dt dv -> Tensor dv dt '[batchSize, 3, 224, 224] -> Tensor dv dt '[batchSize, 4096]
 vgg16ForwardNoFinal Vgg16{..} =
-  -- linear l3 . 
-  -- relu .
   linear l2 . 
   relu . 
   linear l1 . 
@@ -108,3 +104,20 @@ vgg16ForwardNoFinal Vgg16{..} =
 
   where conv2dRelu conv = relu . conv2d @Stride @Pad conv
   
+normalize :: forall dv dt batchSize .  _ => Tensor dv dt [batchSize, 3, 224, 224] -> Tensor dv dt [batchSize, 3, 224, 224] 
+normalize inp = ((inp / maxVal) - mean) / std 
+  where
+    maxVal = full @'[batchSize, 3, 224, 224] @dt @dv (255 :: Float)
+    mean =
+          cat @1
+          $  full @'[batchSize, 1, 224, 224] @dt @dv (0.485 :: Float)
+          :. full @'[batchSize, 1, 224, 224] @dt @dv (0.456 :: Float)
+          :. full @'[batchSize, 1, 224, 224] @dt @dv (0.406 :: Float) 
+          :. HNil
+    std =
+          cat @1
+          $  full @'[batchSize, 1, 224, 224] @dt @dv (0.229 :: Float)
+          :. full @'[batchSize, 1, 224, 224] @dt @dv (0.224 :: Float)
+          :. full @'[batchSize, 1, 224, 224] @dt @dv (0.225 :: Float) 
+          :. HNil
+          

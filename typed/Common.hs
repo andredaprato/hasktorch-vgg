@@ -24,7 +24,6 @@ import           GHC.TypeLits.Extra
 import           System.Environment
 import           System.IO.Unsafe
 import           System.Random
-
 import qualified Torch.Internal.Cast                     as ATen
 import qualified Torch.Internal.Class                    as ATen
 import qualified Torch.Internal.Type                     as ATen
@@ -46,6 +45,9 @@ import qualified Torch.Tensor                  as D
 import qualified Torch.Functional               as D
 import qualified Torch.TensorFactories         as D
 import qualified Torch.Typed.Vision as I
+
+randomIndexes :: Int -> [Int]
+randomIndexes size = (`mod` size) <$> randoms seed where seed = mkStdGen 123
 
 foldLoop
   :: forall a b m . (Num a, Enum a, Monad m) => b -> a -> (b -> a -> m b) -> m b
@@ -111,25 +113,22 @@ train initModel initOptim forward learningRate ptFile = do
   (trainingData, testData) <- I.initMnist "data"
   foldLoop_ (initModel, initOptim) numEpochs $ \(epochModel, epochOptim) epoch -> do
     -- let numIters = I.length trainingData `div` natValI @batchSize
-    -- TODO :  use random indexing and reduce number of iterations
-    --         to make the loop run faster
-    let numIters = 2
+    let numIters = 500 
+    let idxListTrain = randomIndexes (I.length trainingData)
+    let idxListTest = randomIndexes (I.length testData)
     (epochModel', epochOptim') <- foldLoop (epochModel, epochOptim) numIters $ \(model, optim) i -> do
-      print numIters
-      (trainingLoss,_) <- computeLossAndErrorCount @batchSize (forward model True) 
-                                                              i
-                                                              trainingData
+      (trainingLoss,_) <- computeLossAndErrorCount @batchSize (forward model True) i idxListTrain trainingData
       (model', optim') <- runStep model optim trainingLoss learningRate
-      -- print "here?"
       return (model', optim')
 
     (testLoss, testError) <- do
       -- let numIters = I.length testData `div` natValI @batchSize
-      let numIters = 2 -- TODO
       foldLoop (0,0) numIters $ \(org_loss,org_err) i -> do
-        (loss,err) <- computeLossAndErrorCount @batchSize (forward epochModel' False)
-                                                          i
-                                                          testData
+        (loss,err) <- computeLossAndErrorCount
+          @batchSize (forward epochModel' False)
+          i
+          idxListTest
+          testData
         return (org_loss + toFloat loss,org_err + toFloat err)
     putStrLn
       $  "Epoch: "
@@ -148,15 +147,18 @@ train initModel initOptim forward learningRate ptFile = do
     . _
     => (Tensor device 'D.Float '[n, I.DataDim] -> IO (Tensor device 'D.Float '[n, I.ClassDim]))
     -> Int
+    -> [Int]
     -> I.MnistData
     -> IO
          ( Tensor device 'D.Float '[]
          , Tensor device 'D.Float '[]
          )
-  computeLossAndErrorCount forward' index_of_batch data' = do
-    let from = (index_of_batch-1) * natValI @n
-        to = (index_of_batch * natValI @n) - 1
-        indexes = [from .. to]
+  computeLossAndErrorCount forward' index_of_batch idxList data' = do
+    -- let from = (index_of_batch-1) * natValI @n
+    --     to = (index_of_batch * natValI @n) - 1
+    --     indexes = [from .. to]
+    let batchSize = natValI @n 
+        indexes = take batchSize (drop (index_of_batch * batchSize) idxList)
         input  = Torch.Typed.Tensor.toDevice @device $ I.getImages @n data' indexes
         target = Torch.Typed.Tensor.toDevice @device $ I.getLabels @n data' indexes
     prediction <- forward' input

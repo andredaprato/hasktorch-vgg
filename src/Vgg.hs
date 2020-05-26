@@ -82,38 +82,36 @@ instance Randomizable VggSpec Vgg where
     pure $ Vgg convLayers linearLayers
   
 vgg11 :: Vgg -> Tensor -> Tensor 
-vgg11 weights = vggForward weights [1,3,5,7]
+vgg11 weights = vggForward weights [0,1,3]
 
 vgg13 :: Vgg -> Tensor -> Tensor 
-vgg13 weights = vggForward weights [2,5,8,11]
+vgg13 weights = vggForward weights [2,3,5]
 
 vgg16 :: Vgg -> Tensor -> Tensor 
-vgg16 weights = vggForward weights [2,5,9,13]
+vgg16 weights = vggForward weights [1,3,6,9]
 
 vgg19 :: Vgg -> Tensor -> Tensor 
-vgg19 weights = vggForward weights [2,5,10,15]
+vgg19 weights = vggForward weights [1,3,7,11]
 
-  -- TODO: Change weight indexes so that the pooling layers are not assumed to be elements of the list
 vgg11NoFinal :: Vgg -> Tensor -> Tensor 
-vgg11NoFinal weights = vggForwardNoFinal weights [1,3,5,7]
+vgg11NoFinal weights = vggForwardNoFinal weights [0,1,3]
 
 vgg13NoFinal :: Vgg -> Tensor -> Tensor 
-vgg13NoFinal weights = vggForwardNoFinal weights [2,5,8,11]
+vgg13NoFinal weights = vggForwardNoFinal weights [2,3,5]
 
 vgg16NoFinal :: Vgg -> Tensor -> Tensor 
 vgg16NoFinal weights = vggForwardNoFinal weights [1,3,6,9]
 
 vgg19NoFinal :: Vgg -> Tensor -> Tensor 
-vgg19NoFinal weights = vggForwardNoFinal weights [2,5,10,15]
+vgg19NoFinal weights = vggForwardNoFinal weights [1,3,7,11]
 
-  -- not  safe functions  but it should be internal 
-  -- and we can guarantee our head and tail calls won't error at runtime
-
+-- not safe functions but it should be internal 
+-- and we can guarantee our head and tail calls won't error at runtime
+-- when we use these functions
 vggForward v@Vgg{..} poolingLayerIx = linear (head linearLayers) . vggForwardNoFinal v poolingLayerIx
 
 vggForwardNoFinal :: Vgg -> [Int] -> Tensor -> Tensor
-vggForwardNoFinal Vgg{..} poolingLayerIx  input =
-  linear (head linearLayers) $ foldl (\inp l -> relu $ linear l inp)  flattenedConv (tail linearLayers) 
+vggForwardNoFinal Vgg{..} poolingLayerIx  input = foldl (\inp l -> relu $ linear l inp)  flattenedConv (init linearLayers) 
   where
     flattenedConv =
       flatten (Dim 1) (Dim (-1))
@@ -136,3 +134,8 @@ vggForwardNoFinal Vgg{..} poolingLayerIx  input =
     
 
   
+normalize :: Int -> Tensor -> Tensor
+normalize batchSize img = (img / asTensor (255 :: Float) - mean) / std 
+  where
+    mean = cat (Dim 1) $  (\x -> full' [batchSize,1,224,224] x)  <$> [0.485 :: Float, 0.456, 0.406]
+    std = cat (Dim 1) $  (\x -> full' [batchSize,1,224,224] x) <$> [0.229 :: Float, 0.224, 0.225]
